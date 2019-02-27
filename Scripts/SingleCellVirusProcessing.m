@@ -6,6 +6,11 @@ Usr = 'Jen';
 Project = 'NFkBDynamics';
 Dataset = 'HSV-1SpreadwTNF_2018Aug21';
 acquisition = 4;
+
+% define nuclear channel and channel to use for tracking
+NucChannel = 'DeepBlue'; %Channel to segment on
+TrackChannel = 'Red'; %"smoothness" channel, usually virus
+DeathChannel = 'Yellow';
 %% Get MD of raw data
 acqname = ['acq_' num2str(acquisition)];
 fpath = [BaseStr Usr filesep Project filesep Dataset filesep acqname];
@@ -75,7 +80,6 @@ files = dir([MD.pth filesep 'Metadata.txt']);
 if ~isempty(files)
     movefile([MD.pth filesep files(1).name], [MD.pth filesep 'Metadata_BAK.txt']);
 end
-MD=Metadata(fpath);
 
 
 
@@ -120,9 +124,6 @@ R.analysisScript=fullfile([fpath filesep 'AnalysisScriptTemplate.m']);%Change th
 R.reportPth = [BaseStr 'Reports' filesep 'Alon' filesep Project filesep Dataset];
 
 
-% define nuclear channel and channel to use for tracking
-NucChannel = 'DeepBlue'; %Channel to segment on
-TrackChannel = 'Red'; %"smoothness" channel, usually virus
 
 %% Calculate flat fields
 pos = Wells{1};
@@ -153,10 +154,10 @@ end
 
 %% Close gaps
 for WellNum=1:numel(R.PosNames)
-    R.closeGaps(R.PosNames(WellNum),TrackChannel,NucChannel)
+    R.closeGaps(R.PosNames(WellNum),TrackChannel,DeathChannel)
 end
 
-%R.saveResults
+R.saveResults
 %% Load Results
 %R = MultiPositionSingleCellVirusResults(fpath)
 %Wells = R.PosNames;
@@ -177,46 +178,46 @@ for WellNum=1:numel(Wells)
     WellCells = R.getWellsLbl(R.PosNames{WellNum});
     
     indtrckChnl = find(strcmp(TrackChannel,WellCells{1}.channels));
-    indNucChnl = find(strcmp(NucChannel,WellCells{1}.channels));
+    indDeathChnl = find(strcmp(DeathChannel,WellCells{1}.channels));
     
     
     VirusIntensities = cellfun(@(x) x.Int90Prctile{indtrckChnl}, WellCells,'UniformOutput', false);
-    NuclearIntensities = cellfun(@(x) x.Int90Prctile{indNucChnl}, WellCells,'UniformOutput', false);
+    NuclearIntensities = cellfun(@(x) x.Int90Prctile{indDeathChnl}, WellCells,'UniformOutput', false);
     
     for i=1:numel(Tracks)
         i
         VirusTrack{i} = zeros(1,numel(Tracks(i).T));
-        NuclearTrack{i} = zeros(1,numel(Tracks(i).T));
+        DeathTrack{i} = zeros(1,numel(Tracks(i).T));
         
         for j=1:numel(Tracks(i).T)
             % j
             if Tracks(i).tracksFeatIndxCG(j)
                 VirusTrack{i}(j) = VirusIntensities{Tracks(i).T(j)}(Tracks(i).tracksFeatIndxCG(j))';
-                NuclearTrack{i}(j) = NuclearIntensities{Tracks(i).T(j)}(Tracks(i).tracksFeatIndxCG(j))';
+                DeathTrack{i}(j) = NuclearIntensities{Tracks(i).T(j)}(Tracks(i).tracksFeatIndxCG(j))';
             else
                 VirusTrack{i}(j) = NaN;
-                NuclearTrack{i}(j) = NaN;
+                DeathTrack{i}(j) = NaN;
             end
         end
     end
     [Tracks.('VirusTrack')] = VirusTrack{:};
-    [Tracks.('NuclearTrack')] = NuclearTrack{:};
+    [Tracks.('DeathTrack')] = DeathTrack{:};
     
     
     WellCells = R.getWellsLbl(R.PosNames{WellNum});
     ThreshVirus = mean(WellCells{1}.Int90Prctile{indtrckChnl})+2*std(WellCells{1}.Int90Prctile{indtrckChnl});
-    ThreshNuc = mean(WellCells{1}.Int90Prctile{indNucChnl})+2*std(WellCells{1}.Int90Prctile{indNucChnl});
+    ThreshDeath = mean(WellCells{1}.Int90Prctile{indDeathChnl})+2*std(WellCells{1}.Int90Prctile{indDeathChnl});
     
     for i=1:numel(Tracks)
         Tracks(i).Infected = Smoothing(Tracks(i).VirusTrack)>ThreshVirus;
         Tracks(i).CellsGetInfected = sum(Tracks(i).Infected)>4;
-        Tracks(i).Dead = Smoothing(Tracks(i).NuclearTrack,'neigh', 5)>ThreshNuc;
+        Tracks(i).Dead = Smoothing(Tracks(i).DeathTrack,'neigh', 5)>ThreshDeath;
         Tracks(i).CellDies = sum(Tracks(i).Dead)>8  && any(diff(Tracks(i).Dead)==1);% && sum(diff(Tracks(i).Dead))==1;
     end
     
     R.setTracks(Tracks,R.PosNames{WellNum})
 end
-clearvars NuclearTrack  VirusTrack Tracks;
+clearvars DeathTrack  VirusTrack Tracks;
 R.saveResults
 
 %
