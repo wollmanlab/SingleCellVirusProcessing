@@ -3,6 +3,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
         Frames = {};
         WellLbls
         Tracks
+        figSavePath
     end
     
     properties (Dependent = true)
@@ -128,7 +129,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
         function PL = getTracks(R,pos)
             assertPositionExist(R,pos);
             ix = ismember(R.PosNames,pos);
-            PL = R.Tracks{ix};
+            PL = cat(1,R.Tracks{ix});
         end
         
         
@@ -1071,7 +1072,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                     %%
                     
                     a = arrayfun(@(x) size(x.tracksFeatIndxCG,2),tracksFinal);
-                    longtracksFinal = tracksFinal(a>20);% remove all tracks shorter than 20 frames
+                    longtracksFinal = tracksFinal(a>20);% remove all tracks shorter than 10 frames
                 end
             else
                 longtracksFinal = [];
@@ -1217,6 +1218,9 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             end
         end
         
+        
+        
+        
         % %         function  plotInfectedOverT(R,pos)
         %             WellCells = R.getWellsLbl(R.PosNames{WellNum});
         %             ThreshVirus = median(WellCells{1}.VirusIntensities)+3*std(WellCells{1}.VirusIntensities);
@@ -1262,8 +1266,15 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             J = find([PL.CellDies]);
         end
         
-        
-        
+        function paramMat = putInMat(R,Tracks,Param)
+            frames = R.Frames;
+            assert(isfield(Tracks,Param),[Param ' is not a string in Tracks'])
+            dt = (numel(Tracks(1).T)-numel(Tracks(1).(Param)))/2;
+            paramMat = nan(numel(Tracks),numel(frames));
+            for i=1:numel(Tracks)
+                paramMat(i,Tracks(i).T(dt+1:end-dt)) = Tracks(i).(Param);
+            end
+        end
         
     end
     

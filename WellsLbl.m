@@ -1,15 +1,15 @@
 classdef WellsLbl < handle %class of single cell processing of a whole cornea at a single timepoint
     properties
         PosName
+        acq
         Frame
         pth
         ImageDims
-        
+        channels
         
         Centroids
         Intensities
-        Int90Prctile
-        channels
+        Int90Prctile       
         nzAreas
         Areas
         num
@@ -33,49 +33,46 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
     
     methods
         
-%         function epiRank = epiRank(W)
-%             [h,x] = hist(W.epiScore,250);
-%             dataCDF = cumsum(h)/sum(h);
-%             epiRank = interp1(x,dataCDF,W.epiScore);
-%             epiRank(isnan(W.epiScore))=NaN;
-%         end
-       
+        %         function epiRank = epiRank(W)
+        %             [h,x] = hist(W.epiScore,250);
+        %             dataCDF = cumsum(h)/sum(h);
+        %             epiRank = interp1(x,dataCDF,W.epiScore);
+        %             epiRank(isnan(W.epiScore))=NaN;
+        %         end
         
+
         
         
         
         function scatter(W,varargin)
-            channelToShow = ParseInputs('channel', 'virus', varargin);
-            if strcmp(channelToShow,'virus')
+            channelToShow = ParseInputs('channel', W.channels{1}, varargin);
+            ratio = ParseInputs('ratio', false, varargin);
+            rangeToPlot = ParseInputs('range', 1:W.num, varargin);
+            if ~ratio
+            indChNuc = find(strcmp(W.channels,channelToShow));
                 %tzeva = viridis(length(W.Centroids));
-                Ctoplot = (W.Virus90Prctile-0.08)./(0.13-0.08);
-                h = scatter(W.Centroids(:,1),W.Centroids(:,2),[],Ctoplot,'filled');
-                set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0 1],'color','k')
-                colormap('viridis')
-            elseif strcmp(channelToShow,'nuclei')
-                %tzeva = plasma(length(W.Centroids));
-                Ctoplot = (W.Nuclei90Prctile-0.15)./(0.8-0.15);
-
-                h = scatter(W.Centroids(:,1),W.Centroids(:,2),[],Ctoplot,'linewidth',2);
-                set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0,1],'color','k')
-                colormap(makeColorMap([0 0 0], [1 0 0]))
-                
-                %             else
-                %                 range = varargin{1};
-                %
-                %                 if any(range>W.num)
-                %                     range = range(1):W.num;
-                %                     disp('range out of bounds, drawing all points up to the total # of cells.')
-                %                     scatter(W.Centroids(range,1),W.Centroids(range,2),[],tzeva(range,:));
-                %                 else
-                %                     scatter(W.Centroids(range,1),W.Centroids(range,2),[],tzeva(range,:));
-                %                 end;
-                
-            end
-            %scatter(Centroids(:,1),Centroids(:,2),[],parula(length(Centroids)));
-            %hold on
+                Ints = W.Int90Prctile{indChNuc};
+            %Ctoplot = (Ints-0.9*min(Ints))./(max(Ints)-0.9*min(Ints));
+            Ctoplot = Ints;
+            h = scatter(W.Centroids(rangeToPlot,1),W.Centroids(rangeToPlot,2),[],Ctoplot(rangeToPlot),'filled');
+            set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0 1],'color','k','ydir', 'reverse')
+            colormap('viridis')
             shg
-            
+            shg
+            else
+            channel1 = ParseInputs('channel1', 'Cyan', varargin);
+            channel2 = ParseInputs('channel2', 'Yellow', varargin);
+            indCh1 = find(strcmp(W.channels,channel1));
+            indCh2 = find(strcmp(W.channels,channel2));
+
+                Ints = W.Intensities{indCh1}./W.Intensities{indCh2};
+            %Ctoplot = (Ints-prctile(Ints,5))./(prctile(Ints,100)-prctile(Ints,5));
+            h = scatter(W.Centroids(rangeToPlot,1),W.Centroids(rangeToPlot,2),[],Ints(rangeToPlot),'filled');
+            set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0 3],'color','k','ydir', 'reverse')
+            colormap('viridis')
+            shg
+            end
+
         end
         
         
@@ -130,8 +127,8 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
         
         function scattershow(W,varargin)
             MD=Metadata(W.pth);
-            
-            Data =  stkread(MD,'Channel','DeepBlue', 'flatfieldcorrection', false, 'frame', W.Frame, 'Position', W.PosName,'register',false);
+            channelToShow = ParseInputs('channel', 'DeepBlue', varargin);
+            Data =  stkread(MD,'Channel',channelToShow, 'flatfieldcorrection', false, 'frame', W.Frame, 'Position', W.PosName,'register',false);
             RChannel=zeros(size(Data));
             GChannel=zeros(size(Data));
             BChannel=zeros(size(Data));
@@ -153,6 +150,17 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
             stkshow(RGB);
             MIJ.selectWindow('RGB');
             MIJ.run('Stack to Hyperstack...', ['order=xyzct channels=3 slices=' num2str(size(Data,3)) ' frames=1 display=Composite']);
+        end
+        
+        function r = ratioChannels(W,Ch1, Ch2, range)
+            indCh1 = find(strcmp(W.channels,Ch1));
+            indCh2 = find(strcmp(W.channels,Ch2));
+            if nargin==3
+                range = 1:W.num;
+            elseif any(range>W.num)
+                range = 1:W.num;
+            end
+            r = W.Intensities{indCh1}(range)./W.Intensities{indCh2}(range);
         end
         
     end
