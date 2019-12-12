@@ -44,7 +44,7 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
         
         
         
-        function scatter(W,varargin)
+        function h = scatter(W,varargin)
             channelToShow = ParseInputs('channel', W.channels{1}, varargin);
             ratio = ParseInputs('ratio', false, varargin);
             rangeToPlot = ParseInputs('range', 1:W.num, varargin);
@@ -55,7 +55,9 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
             %Ctoplot = (Ints-0.9*min(Ints))./(max(Ints)-0.9*min(Ints));
             Ctoplot = Ints;
             h = scatter(W.Centroids(rangeToPlot,1),W.Centroids(rangeToPlot,2),[],Ctoplot(rangeToPlot),'filled');
-            set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0 1],'color','k','ydir', 'reverse')
+            
+            climits = [prctile(Ints,1), prctile(Ints,99)];
+            set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',climits,'color','w','ydir', 'reverse')
             colormap('viridis')
             shg
             shg
@@ -68,7 +70,7 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
                 Ints = W.Intensities{indCh1}./W.Intensities{indCh2};
             %Ctoplot = (Ints-prctile(Ints,5))./(prctile(Ints,100)-prctile(Ints,5));
             h = scatter(W.Centroids(rangeToPlot,1),W.Centroids(rangeToPlot,2),[],Ints(rangeToPlot),'filled');
-            set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0 3],'color','k','ydir', 'reverse')
+            set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0 3],'color','w','ydir', 'reverse')
             colormap('viridis')
             shg
             end
@@ -79,32 +81,10 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
         
         
         
-        function stkshow(W)
-            MD=Metadata(W.pth);
-            
+        function stkshow(W,varargin)
+            MD=Metadata(W.pth);         
             Data =  stkread(MD,'Channel','DeepBlue', 'flatfieldcorrection', false, 'frame', W.Frame, 'Position', W.PosName,'register',false);
-            RChannel=Data;
-            GChannel=Data;
-            BChannel=Data;
-            [h,x] = hist(log(datasample(Data(:),min(1000000,numel(Data(:))))),1000);
-            maxC = exp(x(find(cumsum(h)./sum(h)>0.995,1,'first')));
-            cmap = parula(W.CC.NumObjects)*maxC*1.5;%scale colormap so that data and centroids are all visible
-            
-            for i=1:W.CC.NumObjects
-                indexToChange = W.CC.PixelIdxList{i};
-                RChannel(indexToChange)=cmap(i,1); %Replace actual pixel values with relevant RGB value
-                GChannel(indexToChange)=cmap(i,2);
-                BChannel(indexToChange)=cmap(i,3);
-                i
-            end
-            RGB = cat(3,RChannel,GChannel,BChannel);%combine into a single RGB image and show. stkshow is sloooooooooooowing me down.
-            stkshow(RGB);
-            MIJ.selectWindow('RGB');
-            MIJ.run('Stack to Hyperstack...', ['order=xyzct channels=3 slices=' num2str(size(Data,3)) ' frames=1 display=Composite']);
-            %stkshow(RChannel)
-            %stkshow(GChannel)
-            %stkshow(BChannel)
-            %MIJ.run('Merge Channels...', 'c1=RChannel c2=GChannel c3=BChannel create');
+            stkshow(Data);
         end
         
         function Density = Density(W,Nbins,J1)
@@ -126,8 +106,11 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
         
         
         function scattershow(W,varargin)
-            MD=Metadata(W.pth);
+            MIJ.run('Close All');
+            MD=Metadata(W.pth,[],1);
             channelToShow = ParseInputs('channel', 'DeepBlue', varargin);
+            showData = ParseInputs('showData', true, varargin);
+
             Data =  stkread(MD,'Channel',channelToShow, 'flatfieldcorrection', false, 'frame', W.Frame, 'Position', W.PosName,'register',false);
             RChannel=zeros(size(Data));
             GChannel=zeros(size(Data));
@@ -137,19 +120,51 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
 
                 range = 1:W.num;
             
-            cmap = viridis(numel(range))*maxC*1.5;%scale colormap so that data and centroids are all visible
+            indChNuc = find(strcmp(W.channels,channelToShow));
+            %tzeva = viridis(length(W.Centroids));
+            Ints = W.Int90Prctile{indChNuc};
+            %Ctoplot = (Ints-0.9*min(Ints))./(max(Ints)-0.9*min(Ints));
+            Ctoplot = Ints;            
+            climits = [prctile(Ints,1), prctile(Ints,99)];
+            Ints = (Ints-climits(1))/(climits(2)-climits(1));
+            
+            cmap = viridis(1024)*maxC*1.5;%scale colormap so that data and centroids are all visible
 
+            CtoShow = interp1(linspace(0,1,1024), 1:1024,Ints,'nearest','extrap');
+            Tforms = MD.getSpecificMetadata('driftTform','Position',W.PosName, 'frame', W.Frame);
             for i=1:numel(range)
-                indexToChange = W.CC.PixelIdxList{range(i)};
-                RChannel(indexToChange)=cmap(i,1); %Replace actual pixel values with relevant RGB value
-                GChannel(indexToChange)=cmap(i,2);
-                BChannel(indexToChange)=cmap(i,3);
-                i
+                Cent = W.Centroids(range(i),:);
+                if ~isnan(Cent)
+                    
+                    if ~isempty(Tforms)
+                        dY = Tforms{1}(7);
+                        dX = Tforms{1}(8);
+                        n = size(Cent,1);
+                        Cent = Cent-repmat([dY, dX],n,1);
+                            
+                    else
+                        warning('No drift correction found')
+                    end
+                    Cent = round(Cent);
+                    indexToChange = sub2ind(size(Data),min(max(Cent(:,2),1),size(Data,1)),min(max(Cent(:,1),1),size(Data,2)));
+                    
+                    RChannel(indexToChange)=cmap(CtoShow(i),1); %Replace actual pixel values with relevant RGB value
+                    GChannel(indexToChange)=cmap(CtoShow(i),2);
+                    BChannel(indexToChange)=cmap(CtoShow(i),3);
+                    i;
+                end
             end
-            RGB = cat(3,RChannel,GChannel,BChannel);%combine into a single RGB image and show. stkshow is sloooooooooooowing me down.
+            se = strel('disk',7);
+            RGB = cat(3,imdilate(RChannel,se),imdilate(GChannel,se),imdilate(BChannel,se));%combine into a single RGB image and show. stkshow is sloooooooooooowing me down.
             stkshow(RGB);
             MIJ.selectWindow('RGB');
             MIJ.run('Stack to Hyperstack...', ['order=xyzct channels=3 slices=' num2str(size(Data,3)) ' frames=1 display=Composite']);
+            MIJ.run('Stack to RGB');
+            if showData
+                stkshow(Data)
+                MIJ.run('Add Image...', 'image=[RGB (RGB)] x=0 y=0 opacity=100 zero');
+            end
+            
         end
         
         function r = ratioChannels(W,Ch1, Ch2, range)
@@ -162,6 +177,34 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
             end
             r = W.Intensities{indCh1}(range)./W.Intensities{indCh2}(range);
         end
+        
+        
+        
+        function r = Ints(W,Ch1, range)
+            
+            indCh1 = find(strcmp(W.channels,Ch1));
+            if nargin==2
+                range = 1:W.num;
+            elseif any(range>W.num)
+                range = 1:W.num;
+            end
+            range(range==0)=[];
+
+            r = W.Intensities{indCh1}(range);
+        end
+        
+        
+        function r = Ints90(W,Ch1, range)
+            indCh1 = find(strcmp(W.channels,Ch1));
+            if nargin==2
+                range = 1:W.num;
+            elseif any(range>W.num)
+                range = 1:W.num;
+            end
+            r = W.Int90Prctile{indCh1}(range);
+        end
+        
+        
         
     end
 end

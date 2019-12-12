@@ -1,4 +1,4 @@
-function welllbl = WellsConstructor_v2(fpath, Well,frame, FF,NucChannel,varargin)
+function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
 % FF is a structure array - FF.channel, FF.img
 
     %init WellsLbl object
@@ -31,9 +31,9 @@ function welllbl = WellsConstructor_v2(fpath, Well,frame, FF,NucChannel,varargin
         %Data(i).img = img;
         
         if i==indChNuc
-            FFimg = squeeze(awt2Dlite(img,7));
-            img = sum(FFimg(:,:,2:end-1),3);
-            Data(i).img = img.*double(img>0);
+            FFimg = squeeze(awt2Dlite(img,8));
+            img = sum(FFimg(:,:,1:end-1),3)+max(max(FFimg(:,:,end)));
+            Data(i).img = img;
         else
             Data(i).img = backgroundSubtraction(img);
         end
@@ -48,11 +48,8 @@ function welllbl = WellsConstructor_v2(fpath, Well,frame, FF,NucChannel,varargin
     %get the nuclear channel and segment
     
     NucData = Data(indChNuc).img;
-    mask = (imgaussfilt(GradMag_v2(NucData),6))>0.005;
-    
-    NucData = mask.*NucData;
     %SizeEst =     EstSizeImg(NucData);
-    [L, voronoiCells] = SegmentCellsImg(NucData,varargin{:});
+    [L, voronoiCells] = SegmentCellsImg_v2(NucData,varargin{:});
         
     %init ss measurements
 

@@ -219,14 +219,15 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
         
         
         
-        function Link(R,pos,trckChnl)
+        function Link(R,pos,trckChnl, varargin)
             %% Now, we'll see how well we can track between adjacent frames (lap)
             
             %init assignment matrices
             %Link12MatCell = {};
             Link21MatCell = {};
             
-            searchRadius = 50;
+            searchRadius = ParseInputs('searchRadius', 60, varargin);
+            intMultiplier = ParseInputs('intMultiplier', 10^2, varargin);
             % maxAmpRatio = 1.5;
             WellCells = R.getWellsLbl(pos);
             inds = find(cellfun(@(x) ~isempty(x), WellCells));
@@ -238,13 +239,17 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                     Link21MatCell{i} = [];
                 else
                     Dists  = createDistanceMatrix(WellCells{i}.Centroids,WellCells{i+1}.Centroids);
+                    costMat = Dists;
                     
-                    
-                    a1 = repmat(WellCells{i}.Int90Prctile{indtrckChnl},1,numel(WellCells{i+1}.Int90Prctile{indtrckChnl}));
-                    a2 = repmat(WellCells{i+1}.Int90Prctile{indtrckChnl}',numel(WellCells{i}.Int90Prctile{indtrckChnl}),1);
+                    for jj = indtrckChnl
+                    d1 = (WellCells{i}.Int90Prctile{jj}-nanmean(WellCells{i}.Int90Prctile{jj}))./nanstd(WellCells{i}.Int90Prctile{jj});
+                    a1 = repmat(d1,1,numel(WellCells{i+1}.Int90Prctile{jj}));
+                    d2 = (WellCells{i+1}.Int90Prctile{jj}-nanmean(WellCells{i+1}.Int90Prctile{jj}))./nanstd(WellCells{i+1}.Int90Prctile{jj});
+                    a2 = repmat(d2',numel(WellCells{i}.Int90Prctile{jj}),1);
                     VirDists = abs(a2-a1);
-                    costMat = Dists+10^3*VirDists;%;
                     
+                    costMat = costMat+intMultiplier*VirDists;%;
+                    end
                     %divide the larger of the two amplitudes by the smaller value
                     %               ampRatio = a1./a2;
                     %               J = ampRatio < 1;
@@ -258,7 +263,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                     
                     costMat = sparse(double(costMat));
                     %
-                    [~, Links21] = lap(costMat,[],[],1, 50);
+                    [~, Links21] = lap(costMat,[],[],1, 200);
                     %Make matrix of connections found
                     Link21Mat =repmat(Links21(1:length(WellCells{i+1}.Centroids(:,1))),1,length(WellCells{i}.Centroids(:,1)));
                     
@@ -275,10 +280,21 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             R.setWellsLbl(WellCells,pos)
         end
         
-        function closeGaps(R,pos,trckChnl,NucChnl)
-            mergeSplit = 0;
+        function closeGaps(R,pos,trckChnl,NucChnl,varargin)
+            
+            
+            
+            maxTimeJump = ParseInputs('maxTimeJump', 4, varargin);
+            maxStep = ParseInputs('maxStep', 20, varargin);
+            mergeSplit = ParseInputs('mergeSplit', 0, varargin);
+            maxAmpDiff = ParseInputs('maxAmpDiff', 0.05, varargin);
+            whereToStart = ParseInputs('wheretostart', 1, varargin);
+            whereToEnd = ParseInputs('wheretoend', numel(R.Frames), varargin);
+
             
             WellCells = R.getWellsLbl(pos);
+            WellCells = WellCells(whereToStart:whereToEnd);
+
             indtrckChnl = find(strcmp(trckChnl,WellCells{1}.channels));
             indNucChnl = find(strcmp(NucChnl,WellCells{1}.channels));
             
@@ -399,8 +415,8 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                 
                 
                 
-                %remove tracks whose length is less than minTrackLen
-                minTrackLen=5;
+                %remove stubs whose length is less than minTrackLen
+                minTrackLen=10;
                 
                 indxKeep = find(trackSEL(:,3) >= minTrackLen);
                 trackSEL = trackSEL(indxKeep,:);
@@ -421,8 +437,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                 
                 
                 %% Find all possible links based on thresholds
-                maxTimeJump = 3;
-                maxStep = 25;
+
                 trackStartTime = trackSEL(:,1);
                 trackEndTime   = trackSEL(:,2);
                 
@@ -432,7 +447,11 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                 
                 AmpStarts = cell2mat(arrayfun(@(a) full(trackedFeatureInfo(a,8*(trackStartTime(a)-1)+4:8*(trackStartTime(a)-1)+4))',1:numTracks,'UniformOutput',false))';
                 AmpEnds = cell2mat(arrayfun(@(a) full(trackedFeatureInfo(a,8*(trackEndTime(a)-1)+4:8*(trackEndTime(a)-1)+4))',1:numTracks,'UniformOutput',false))';
+
                 
+                indStarts = cell2mat(arrayfun(@(a) trackedFeatureIndx(a,trackStartTime(a)),1:numTracks,'UniformOutput',false))';
+                indEnds = cell2mat(arrayfun(@(a) trackedFeatureIndx(a,trackEndTime(a)),1:numTracks,'UniformOutput',false))';
+  
                 
                 indx1=[];
                 indx2=[];
@@ -444,12 +463,16 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                     if ~rem(ind1,100)
                         waitbar(ind1/numTracks,f,'Calculating ditances of possible links...');
                     end
+          
                     for ind2=1: numTracks
+
+                               
                         dT = trackStartTime(ind2)-trackEndTime(ind1);
+
                         if dT>0 && dT<=maxTimeJump;%condition on time
-                            dR = norm(CentroidsStarts(ind1,:)-CentroidsEnds(ind2,:));
+                            dR = norm(CentroidsStarts(ind2,:)-CentroidsEnds(ind1,:));
                             if dR<=sqrt(dT)*maxStep;%condition on space
-                                if abs(AmpStarts(ind1)-AmpEnds(ind2))<0.05 %condition on amp
+                                if abs(AmpStarts(ind2)-AmpEnds(ind1))<maxAmpDiff %condition on amp
                                     indx1=[indx1 ind1];
                                     indx2=[indx2 ind2];
                                     Dists=[Dists dR];
@@ -496,7 +519,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                     numSplit  =  0; %index counting splitting events
                     indxSplit = []; %vector storing splitting track number
                     altCostSplit = []; %vector storing alternative costs of not splitting
-                    maxDispAllowed = 40;
+                    maxDispAllowed = 75;
                     %
                     %go over all tracks
                     [numTracksLink,numFrames] = size(trackedFeatureIndx);
@@ -605,7 +628,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                                     
                                     %ampCost = ampRatio; %due to amplitude
                                     %ampCost(ampCost<1) = ampCost(ampCost<1) ^ (-2); %punishment harsher when intensity of splitting feature < sum of intensities of features after splitting
-                                    ampCost = 10^4*(ampDiffIndSpS+ampDiffIndSpSp1);
+                                    ampCost = 10^3*(ampDiffIndSpS+ampDiffIndSpSp1);
                                     meanDisp2Tracks = trackMeanDispMag(iStart); %for displacement scaling
                                     if isnan(meanDisp2Tracks)
                                         meanDisp2Tracks = nanmean(meanDispAllTracks);
@@ -1072,7 +1095,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                     %%
                     
                     a = arrayfun(@(x) size(x.tracksFeatIndxCG,2),tracksFinal);
-                    longtracksFinal = tracksFinal(a>20);% remove all tracks shorter than 10 frames
+                    longtracksFinal = tracksFinal(a>25);% remove all tracks shorter than 10 frames
                 end
             else
                 longtracksFinal = [];
@@ -1211,13 +1234,27 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             longtracksFinal = R.getTracks(pos);
             frames = R.Frames;
             allTracks = zeros(size(longtracksFinal,1),numel(frames));
+            nTracks = 1;
             for i=1:size(longtracksFinal,1);
                 trackStart = longtracksFinal(i).seqOfEvents(1,1);
                 trackEnd = longtracksFinal(i).seqOfEvents(end,1);
-                allTracks(i,trackStart:trackEnd) = longtracksFinal(i).tracksFeatIndxCG;
+                for j=1:size(longtracksFinal(i).tracksFeatIndxCG,1)
+                    allTracks(nTracks,trackStart:trackEnd) = longtracksFinal(i).tracksFeatIndxCG(j,:);
+                    nTracks = nTracks+1;
+                end
             end
         end
         
+        function allTracks = heatmapTracks(R,pos, dataname)
+            longtracksFinal = R.getTracks(pos);
+            frames = R.Frames;
+            allTracks = zeros(size(longtracksFinal,1),numel(frames));
+            for i=1:size(longtracksFinal,1);
+                trackStart = longtracksFinal(i).seqOfEvents(1,1);
+                trackEnd = longtracksFinal(i).seqOfEvents(end,1);
+                allTracks(i,trackStart:trackEnd) = nanfill(longtracksFinal(i).(dataname));
+            end
+        end
         
         
         
@@ -1276,6 +1313,15 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             end
         end
         
+        function plotTrackInIJ(R,pos,i)
+            T = R.getTracks(pos);
+            Track = T(i);
+            Xs = Track.tracksCoordAmpCG(1,1:8:end);
+            Ys = Track.tracksCoordAmpCG(1,2:8:end);
+            
+            v = [Xs(1:end-1); Ys(1:end-1); Xs(2:end); Ys(2:end)];
+            plotLinesInIJ(v(:))
+        end
     end
     
     
