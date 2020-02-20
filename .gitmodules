@@ -1,0 +1,9 @@
+[submodule "Metadata"]
+	path = Metadata
+	url = https://github.com/wollmanlab/Metadata
+[submodule "Results"]
+	path = Results
+	url = https://github.com/wollmanlab/Results
+[submodule "MultiPurposeImageAnalysisTools"]
+	path = MultiPurposeImageAnalysisTools
+	url = https://github.com/wollmanlab/MultiPurposeImageAnalysisTools
