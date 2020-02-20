@@ -290,7 +290,9 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             maxAmpDiff = ParseInputs('maxAmpDiff', 0.05, varargin);
             whereToStart = ParseInputs('wheretostart', 1, varargin);
             whereToEnd = ParseInputs('wheretoend', numel(R.Frames), varargin);
-
+            minLength = ParseInputs('minLength', 10, varargin);
+            finalMinLength = ParseInputs('finalminLength', 25, varargin);
+            
             
             WellCells = R.getWellsLbl(pos);
             WellCells = WellCells(whereToStart:whereToEnd);
@@ -416,7 +418,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                 
                 
                 %remove stubs whose length is less than minTrackLen
-                minTrackLen=10;
+                minTrackLen=minLength;
                 
                 indxKeep = find(trackSEL(:,3) >= minTrackLen);
                 trackSEL = trackSEL(indxKeep,:);
@@ -1095,7 +1097,8 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
                     %%
                     
                     a = arrayfun(@(x) size(x.tracksFeatIndxCG,2),tracksFinal);
-                    longtracksFinal = tracksFinal(a>25);% remove all tracks shorter than 10 frames
+                    
+                    longtracksFinal = tracksFinal(a>finalMinLength);% remove all tracks shorter than 10 frames
                 end
             else
                 longtracksFinal = [];
@@ -1251,7 +1254,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             allTracks = zeros(size(longtracksFinal,1),numel(frames));
             for i=1:size(longtracksFinal,1);
                 trackStart = longtracksFinal(i).seqOfEvents(1,1);
-                trackEnd = longtracksFinal(i).seqOfEvents(end,1);
+                trackEnd = longtracksFinal(i).seqOfEvents(find(longtracksFinal(i).seqOfEvents(:,3)==1,1,'last'),1);
                 allTracks(i,trackStart:trackEnd) = nanfill(longtracksFinal(i).(dataname));
             end
         end

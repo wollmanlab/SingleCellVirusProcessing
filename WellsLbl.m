@@ -9,7 +9,7 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
         
         Centroids
         Intensities
-        Int90Prctile       
+        Int90Prctile
         nzAreas
         Areas
         num
@@ -40,7 +40,7 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
         %             epiRank(isnan(W.epiScore))=NaN;
         %         end
         
-
+        
         
         
         
@@ -49,32 +49,32 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
             ratio = ParseInputs('ratio', false, varargin);
             rangeToPlot = ParseInputs('range', 1:W.num, varargin);
             if ~ratio
-            indChNuc = find(strcmp(W.channels,channelToShow));
+                indChNuc = find(strcmp(W.channels,channelToShow));
                 %tzeva = viridis(length(W.Centroids));
                 Ints = W.Int90Prctile{indChNuc};
-            %Ctoplot = (Ints-0.9*min(Ints))./(max(Ints)-0.9*min(Ints));
-            Ctoplot = Ints;
-            h = scatter(W.Centroids(rangeToPlot,1),W.Centroids(rangeToPlot,2),[],Ctoplot(rangeToPlot),'filled');
-            
-            climits = [prctile(Ints,1), prctile(Ints,99)];
-            set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',climits,'color','w','ydir', 'reverse')
-            colormap('viridis')
-            shg
-            shg
+                %Ctoplot = (Ints-0.9*min(Ints))./(max(Ints)-0.9*min(Ints));
+                Ctoplot = Ints;
+                h = scatter(W.Centroids(rangeToPlot,1),W.Centroids(rangeToPlot,2),[],Ctoplot(rangeToPlot),'filled');
+                
+                climits = [prctile(Ints,1), prctile(Ints,99)];
+                set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',climits,'color','w','ydir', 'reverse')
+                colormap('viridis')
+                shg
+                shg
             else
-            channel1 = ParseInputs('channel1', 'Cyan', varargin);
-            channel2 = ParseInputs('channel2', 'Yellow', varargin);
-            indCh1 = find(strcmp(W.channels,channel1));
-            indCh2 = find(strcmp(W.channels,channel2));
-
+                channel1 = ParseInputs('channel1', 'Cyan', varargin);
+                channel2 = ParseInputs('channel2', 'Yellow', varargin);
+                indCh1 = find(strcmp(W.channels,channel1));
+                indCh2 = find(strcmp(W.channels,channel2));
+                
                 Ints = W.Intensities{indCh1}./W.Intensities{indCh2};
-            %Ctoplot = (Ints-prctile(Ints,5))./(prctile(Ints,100)-prctile(Ints,5));
-            h = scatter(W.Centroids(rangeToPlot,1),W.Centroids(rangeToPlot,2),[],Ints(rangeToPlot),'filled');
-            set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0 3],'color','w','ydir', 'reverse')
-            colormap('viridis')
-            shg
+                %Ctoplot = (Ints-prctile(Ints,5))./(prctile(Ints,100)-prctile(Ints,5));
+                h = scatter(W.Centroids(rangeToPlot,1),W.Centroids(rangeToPlot,2),[],Ints(rangeToPlot),'filled');
+                set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',[0 3],'color','w','ydir', 'reverse')
+                colormap('viridis')
+                shg
             end
-
+            
         end
         
         
@@ -82,54 +82,67 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
         
         
         function stkshow(W,varargin)
-            MD=Metadata(W.pth);         
-            Data =  stkread(MD,'Channel','DeepBlue', 'flatfieldcorrection', false, 'frame', W.Frame, 'Position', W.PosName,'register',false);
+            MD=Metadata(W.pth);
+            channelToShow = ParseInputs('channel', 'DeepBlue', varargin);
+            Data =  stkread(MD,'Channel',channelToShow, 'flatfieldcorrection', false, 'frame', W.Frame, 'Position', W.PosName,'register',false);
             stkshow(Data);
         end
         
-        function Density = Density(W,Nbins,J1)
-%            MD=Metadata(W.pth);
-%            PixelSize = MD.unique('PixelSize');
-            xx = W.Centroids(:,1);
-            yy = W.Centroids(:,2);
-            if nargin==2
-                J1=1:size(xx,1);
-            end
-            J = W.Jepi;
-            [DensityMatrix, Bins] = hist3([xx(J) yy(J)], [Nbins Nbins]);
-            %BinSize = diff(Bins{1}(1:2))*diff(Bins{2}(1:2))*(PixelSize^2);%microns^2
-            %DensityMatrix = DensityMatrix/BinSize; %cells per micron^2 in xy
-            DensityMatrix = DensityMatrix./mean(DensityMatrix(:));
-            DensityMatrix = imgaussfilt(DensityMatrix,1);
-            Density = interp2(Bins{2}, Bins{1}, DensityMatrix, yy(J1), xx(J1), 'spline');
+        function D = Density(W)
+            
+            [~,D] = knnsearch(W.Centroids,W.Centroids,'K', 11);
+            D = 1./mean(D(:,2:end),2);
+            %h = scatter(W.Centroids(:,1),W.Centroids(:,2),[],D,'filled');
+            %climits = [prctile(D,1), prctile(D,99)];
+            %climits = [0.0042    0.0113];
+            %set(gca,'xlim',[-200 3000],'ylim',[-200 2500],'clim',climits,'color','w','ydir', 'reverse')
+            %             xx = W.Centroids(:,1);
+            %             yy = W.Centroids(:,2);
+            %             if nargin==2
+            %                 J1=1:size(xx,1);
+            %             end
+            %             [DensityMatrix, Bins] = hist3([xx yy], [Nbins Nbins]);
+            %             %BinSize = diff(Bins{1}(1:2))*diff(Bins{2}(1:2))*(PixelSize^2);%microns^2
+            %             %DensityMatrix = DensityMatrix/BinSize; %cells per micron^2 in xy
+            %             DensityMatrix = DensityMatrix./mean(DensityMatrix(:));
+            %             DensityMatrix = imgaussfilt(DensityMatrix,1);
+            %             Density = interp2(Bins{2}, Bins{1}, DensityMatrix, yy(J1), xx(J1), 'spline');
         end
         
         
         function scattershow(W,varargin)
-            MIJ.run('Close All');
+            try
+                MIJ.run('Close All');
+            catch
+            end
             MD=Metadata(W.pth,[],1);
             channelToShow = ParseInputs('channel', 'DeepBlue', varargin);
             showData = ParseInputs('showData', true, varargin);
-
-            Data =  stkread(MD,'Channel',channelToShow, 'flatfieldcorrection', false, 'frame', W.Frame, 'Position', W.PosName,'register',false);
+            
+            if ~isempty(regexpi(channelToShow,'_peri'))
+                channelToShowimg = channelToShow(1:regexpi(channelToShow,'_peri')-1);
+            else
+                channelToShowimg = channelToShow;
+            end
+            Data =  stkread(MD,'Channel',channelToShowimg, 'flatfieldcorrection', false, 'frame', W.Frame, 'Position', W.PosName,'register',false);
             RChannel=zeros(size(Data));
             GChannel=zeros(size(Data));
             BChannel=zeros(size(Data));
             [h,x] = hist(log(datasample(Data(:),min(1000000,numel(Data(:))))),1000);
             maxC = exp(x(find(cumsum(h)./sum(h)>0.995,1,'first')));
-
-                range = 1:W.num;
+            
+            range = 1:W.num;
             
             indChNuc = find(strcmp(W.channels,channelToShow));
             %tzeva = viridis(length(W.Centroids));
             Ints = W.Int90Prctile{indChNuc};
             %Ctoplot = (Ints-0.9*min(Ints))./(max(Ints)-0.9*min(Ints));
-            Ctoplot = Ints;            
+
             climits = [prctile(Ints,1), prctile(Ints,99)];
             Ints = (Ints-climits(1))/(climits(2)-climits(1));
             
             cmap = viridis(1024)*maxC*1.5;%scale colormap so that data and centroids are all visible
-
+            
             CtoShow = interp1(linspace(0,1,1024), 1:1024,Ints,'nearest','extrap');
             Tforms = MD.getSpecificMetadata('driftTform','Position',W.PosName, 'frame', W.Frame);
             for i=1:numel(range)
@@ -141,7 +154,7 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
                         dX = Tforms{1}(8);
                         n = size(Cent,1);
                         Cent = Cent-repmat([dY, dX],n,1);
-                            
+                        
                     else
                         warning('No drift correction found')
                     end
@@ -155,16 +168,20 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
                 end
             end
             se = strel('disk',7);
-            RGB = cat(3,imdilate(RChannel,se),imdilate(GChannel,se),imdilate(BChannel,se));%combine into a single RGB image and show. stkshow is sloooooooooooowing me down.
+            RGB = cat(4,imdilate(RChannel,se),imdilate(GChannel,se),imdilate(BChannel,se));%combine into a single RGB image and show. stkshow is sloooooooooooowing me down.
             stkshow(RGB);
             MIJ.selectWindow('RGB');
-            MIJ.run('Stack to Hyperstack...', ['order=xyzct channels=3 slices=' num2str(size(Data,3)) ' frames=1 display=Composite']);
+            %MIJ.run('Stack to Hyperstack...', ['order=xyzct channels=3 slices=' num2str(size(Data,3)) ' frames=1 display=Composite']);
             MIJ.run('Stack to RGB');
             if showData
                 stkshow(Data)
                 MIJ.run('Add Image...', 'image=[RGB (RGB)] x=0 y=0 opacity=100 zero');
             end
-            
+            ij.IJ.selectWindow('RGB');
+            ij.IJ.run('Close');
+            ij.IJ.selectWindow('RGB (RGB)');
+            ij.IJ.run('Close');
+
         end
         
         function r = ratioChannels(W,Ch1, Ch2, range)
@@ -189,7 +206,7 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
                 range = 1:W.num;
             end
             range(range==0)=[];
-
+            
             r = W.Intensities{indCh1}(range);
         end
         
@@ -201,6 +218,8 @@ classdef WellsLbl < handle %class of single cell processing of a whole cornea at
             elseif any(range>W.num)
                 range = 1:W.num;
             end
+            range(range==0)=[];
+
             r = W.Int90Prctile{indCh1}(range);
         end
         

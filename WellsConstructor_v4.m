@@ -1,4 +1,4 @@
-function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
+function welllbl = WellsConstructor_v4(fpath, Well,frame,NucChannel,varargin)
 % FF is a structure array - FF.channel, FF.img
 
     %init WellsLbl object
@@ -8,6 +8,7 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
     welllbl.pth = fpath;
     
     periRingFlag = ParseInputs('PeriRing', false, varargin);
+    perisize = ParseInputs('perisize', 5, varargin);
 
     
     %get the data for this well in all channels
@@ -84,7 +85,11 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
     indOtherChannels = find(~strcmp(Channels,NucChannel));
     for i=indOtherChannels'
         DataOther = Data(i).img;
-        S = regionprops(CCVoronoi,DataOther,'MeanIntensity','PixelValues');
+        if periRingFlag
+            S = regionprops(CCVoronoi,DataOther.*(L>0),'MeanIntensity','PixelValues');
+        else
+            S = regionprops(CCVoronoi,DataOther,'MeanIntensity','PixelValues');
+        end
         Intensities = cat(1, S.MeanIntensity).*Areas;
         %prctile(S(454).PixelValues,95);
         Int90Prctile = arrayfun(@(x) prctile(x.PixelValues,99.9),S);
@@ -92,6 +97,22 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
         Ints90P{i}= Int90Prctile;
     end
 
+    if periRingFlag
+        se = strel('disk',perisize,0);
+        PeriL = imdilate(L,se)-L;
+        IntsPeri = cell(numel(Channels),1);
+        Ints90PPeri = cell(numel(Channels),1);
+        for i=indOtherChannels'
+            DataOther = Data(i).img;
+            S = regionprops(CCVoronoi,DataOther.*(PeriL>0),'MeanIntensity','PixelValues');
+            Intensities = cat(1, S.MeanIntensity).*Areas;
+            %prctile(S(454).PixelValues,95);
+            Int90Prctile = arrayfun(@(x) prctile(x.PixelValues,99.9),S);
+            IntsPeri{i}=Intensities;
+            Ints90PPeri{i}= Int90Prctile;
+        end
+    end
+    
     
     %Apply drift correction to centroids!
     Tforms = MD.getSpecificMetadata('driftTform','Position',Well, 'frame', frame);
@@ -106,13 +127,17 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
     welllbl.Centroids = Centroids;
     welllbl.Areas = Areas;
     welllbl.nzAreas = nzAreas;
-    welllbl.Intensities = Ints;
-    welllbl.Int90Prctile = Ints90P;
-    
-    welllbl.channels = Channels;
+    if periRingFlag
+        welllbl.Intensities = [Ints; IntsPeri(indOtherChannels)];
+        welllbl.Int90Prctile = [Ints90P; Ints90PPeri(indOtherChannels)];
+        welllbl.channels = [Channels; cellfun(@(x) [x '_peri'],Channels(indOtherChannels),'UniformOutput',false)];
+    else
+        welllbl.Intensities = Ints;
+        welllbl.Int90Prctile = Ints90P;
+        welllbl.channels = Channels;
+    end
     
     welllbl.num = numel(NuclearIntensities);
-
 
     frame
     
