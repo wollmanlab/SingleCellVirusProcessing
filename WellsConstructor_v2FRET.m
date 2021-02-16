@@ -21,20 +21,14 @@ function welllbl = WellsConstructor_v2FRET(fpath, Well,frame,NucChannel)
     indChNuc = find(strcmp(Channels,NucChannel));
     for i=1:numel(Channels)
     img = stkread(MD,'Channel',Channels(i), 'flatfieldcorrection', false,'blindflatfield',false, 'frame', frame, 'Position', Well,'register',false);
-   % FFimg = squeeze(awt2Dlite(img,7));
-   % img = sum(FFimg(:,:,1:end-1),3);
+
     
-    %Data(i).channel = Channels(i);
-    %FFToUse =  FF(find(strcmp(arrayfun(@(x) x.channel, FF,'uniformoutput',false),Channels(i)))).img;
-    %Data(i).img = img.*(img>=0);
-    %Data(i).img = backgroundSubtraction(img);
     if i==indChNuc
         FFimg = squeeze(awt2Dlite(img,7));
         img = sum(FFimg(:,:,1:end-1),3);
         Data(i).img = img + mean(mean(FFimg(:,:,end)));
     else
-        [Data(i).img bck] = backgroundSubtraction(img); %calculated from images, can have slight differences 
-        
+        [Data(i).img bck] = backgroundSubtraction(img); %calculated from images, can have slight differences      
     end
     %img = img - FFToUse;
     %img(img<0)=0;

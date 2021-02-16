@@ -9,15 +9,20 @@ function welllbl = WellsConstructor_v4(fpath, Well,frame,NucChannel,varargin)
     
     periRingFlag = ParseInputs('PeriRing', false, varargin);
     perisize = ParseInputs('perisize', 5, varargin);
+    register = ParseInputs('register', true, varargin);
 
+    equalize_hists = ParseInputs('equalize_hists', struct('channel',[],'h',[]), varargin);
     
     %get the data for this well in all channels
     i=frame;
-    
-        MD=Metadata(fpath,[],1);
+        if register
+            MD=Metadata(fpath,[],1);
+        else
+            MD=Metadata(fpath);
+        end
 
         if isempty(MD.Values)
-        MD=Metadata(fpath);
+            MD=Metadata(fpath);
         end
         
 
@@ -38,6 +43,9 @@ function welllbl = WellsConstructor_v4(fpath, Well,frame,NucChannel,varargin)
             FFimg = squeeze(awt2Dlite(img,8));
             img = sum(FFimg(:,:,2:end-1),3)+max(max(FFimg(:,:,end)));
             Data(i).img = img;
+        elseif any(strcmpi(Data(i).channel,{equalize_hists.channel}))
+            h = equalize_hists(strcmpi(Data(i).channel,{equalize_hists.channel})).h;
+            Data(i).img = backgroundSubtraction(histeq(img,h));
         else
             Data(i).img = backgroundSubtraction(img);
         end
@@ -67,7 +75,7 @@ function welllbl = WellsConstructor_v4(fpath, Well,frame,NucChannel,varargin)
     
     CCVoronoi = bwconncomp(~voronoiCells.RegionBounds); 
       
-    S = regionprops(CCVoronoi,NucData.*(L>0),'MeanIntensity','WeightedCentroid','Area','PixelValues');
+    S = regionprops(L,NucData,'MeanIntensity','WeightedCentroid','Area','PixelValues');
     % filter CCNuclei keep only cells with volume in some range
     Areas = cat(1, S.Area);
     Centroids = cat(1,S.WeightedCentroid);
@@ -85,11 +93,9 @@ function welllbl = WellsConstructor_v4(fpath, Well,frame,NucChannel,varargin)
     indOtherChannels = find(~strcmp(Channels,NucChannel));
     for i=indOtherChannels'
         DataOther = Data(i).img;
-        if periRingFlag
-            S = regionprops(CCVoronoi,DataOther.*(L>0),'MeanIntensity','PixelValues');
-        else
-            S = regionprops(CCVoronoi,DataOther,'MeanIntensity','PixelValues');
-        end
+        
+        S = regionprops(L,DataOther,'MeanIntensity','PixelValues');
+        
         Intensities = cat(1, S.MeanIntensity).*Areas;
         %prctile(S(454).PixelValues,95);
         Int90Prctile = arrayfun(@(x) prctile(x.PixelValues,99.9),S);
@@ -104,7 +110,7 @@ function welllbl = WellsConstructor_v4(fpath, Well,frame,NucChannel,varargin)
         Ints90PPeri = cell(numel(Channels),1);
         for i=indOtherChannels'
             DataOther = Data(i).img;
-            S = regionprops(CCVoronoi,DataOther.*(PeriL>0),'MeanIntensity','PixelValues');
+            S = regionprops(PeriL,DataOther,'MeanIntensity','PixelValues');
             Intensities = cat(1, S.MeanIntensity).*Areas;
             %prctile(S(454).PixelValues,95);
             Int90Prctile = arrayfun(@(x) prctile(x.PixelValues,99.9),S);

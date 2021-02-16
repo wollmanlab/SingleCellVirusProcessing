@@ -1255,7 +1255,7 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             for i=1:size(longtracksFinal,1);
                 trackStart = longtracksFinal(i).seqOfEvents(1,1);
                 trackEnd = longtracksFinal(i).seqOfEvents(find(longtracksFinal(i).seqOfEvents(:,3)==1,1,'last'),1);
-                allTracks(i,trackStart:trackEnd) = nanfill(longtracksFinal(i).(dataname));
+                allTracks(i,trackStart:trackEnd) = (longtracksFinal(i).(dataname));
             end
         end
         
@@ -1323,7 +1323,33 @@ classdef MultiPositionSingleCellVirusResults < MultiPositionResults
             Ys = Track.tracksCoordAmpCG(1,2:8:end);
             
             v = [Xs(1:end-1); Ys(1:end-1); Xs(2:end); Ys(2:end)];
-            plotLinesInIJ(v(:))
+            plotLinesInIJ(v(:));
+        end
+        
+        function plotTrackInIJTracks(R,T,i)
+            Track = T(i);
+            Xs = Track.tracksCoordAmpCG(1,1:8:end);
+            Ys = Track.tracksCoordAmpCG(1,2:8:end);
+            
+            v = [Xs(1:end-1); Ys(1:end-1); Xs(2:end); Ys(2:end)];
+            v= nanfill(v')';
+            plotLinesInIJ(v(:));
+        end
+        
+        function checkTracks(R,MD,pos,varargin)
+            Channel = ParseInputs('Channel','DeepBlue',varargin);
+            Data = stkread(MD,'Position',pos,'Channel', Channel,varargin{:});
+            Tracks = R.getTracks(pos);
+            stkshow(Data);
+            R.plotTrackInIJTracks(Tracks,1);
+            R.TracksWindow(Tracks)
+        end
+        
+        function TracksWindow(R,Tracks)
+            figure(418)
+            set(418,'Windowstyle','normal','toolbar','none','menubar','none','Position',[663 492 250 75],'Name','Tracks','NumberTitle','off')
+            %uicontrol(469,'Style', 'pushbutton', 'String','Done','Position',[20 20 100 35],'fontsize',13,'callback',@(~,~) close(469))
+            uicontrol(418,'Style','popup','String',([1:numel(Tracks)]'),'Position',[50 0 150 50],'fontsize',13,'callback',@(source,~) plotTrackInIJTracks(R,Tracks,source.Value));
         end
     end
     

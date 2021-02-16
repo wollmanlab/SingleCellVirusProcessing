@@ -1,4 +1,4 @@
-function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
+function welllbl = WellsConstructor_v4FRET(fpath, Well,frame,NucChannel,varargin)
 % FF is a structure array - FF.channel, FF.img
 
     %init WellsLbl object
@@ -7,15 +7,22 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
     welllbl.Frame = frame;
     welllbl.pth = fpath;
     
+    periRingFlag = ParseInputs('PeriRing', false, varargin);
+    perisize = ParseInputs('perisize', 5, varargin);
+    register = ParseInputs('register', true, varargin);
 
+    equalize_hists = ParseInputs('equalize_hists', struct('channel',[],'h',[]), varargin);
     
     %get the data for this well in all channels
     i=frame;
-    
-        MD=Metadata(fpath,[],1);
+        if register
+            MD=Metadata(fpath,[],1);
+        else
+            MD=Metadata(fpath);
+        end
 
         if isempty(MD.Values)
-        MD=Metadata(fpath);
+            MD=Metadata(fpath);
         end
         
 
@@ -34,8 +41,11 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
         
         if i==indChNuc
             FFimg = squeeze(awt2Dlite(img,8));
-            img = sum(FFimg(:,:,2:end-1),3)+0.1;
+            img = sum(FFimg(:,:,2:end-1),3)+max(max(FFimg(:,:,end)));
             Data(i).img = img;
+        elseif any(strcmpi(Data(i).channel,{equalize_hists.channel}))
+            h = equalize_hists(strcmpi(Data(i).channel,{equalize_hists.channel})).h;
+            Data(i).img = backgroundSubtraction(histeq(img,h));
         else
             Data(i).img = backgroundSubtraction(img);
         end
@@ -61,7 +71,7 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
     Ints = cell(numel(Channels),1);
     Ints90P = cell(numel(Channels),1);
     
-    %A = regionprops(L,'Area');
+    A = regionprops(L,'Area');
     
     CCVoronoi = bwconncomp(~voronoiCells.RegionBounds); 
       
@@ -90,7 +100,35 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
         Ints{i}=Intensities;
         Ints90P{i}= Int90Prctile;
     end
+    
+    
+        IntsFRET = cell(1,1);
+        indCyanChannels = find(~strcmp(Channels,'Cyan'));
+        DataCyan = Data(indCyanChannels).img;
 
+        indYellowChannels = find(~strcmp(Channels,'Yellow'));
+        DataYellow = Data(indYellowChannels).img;
+        
+        S = regionprops(L,(DataCyan./DataYellow),'PixelValues');     
+        IntsFRET = arrayfun(@(x) prctile(x.PixelValues,90),S);    
+    
+
+    if periRingFlag
+        se = strel('disk',perisize,0);
+        PeriL = imdilate(L,se)-L;
+        IntsPeri = cell(numel(Channels),1);
+        Ints90PPeri = cell(numel(Channels),1);
+        for i=indOtherChannels'
+            DataOther = Data(i).img;
+            S = regionprops(PeriL,DataOther,'MeanIntensity','PixelValues');
+            Intensities = cat(1, S.MeanIntensity).*Areas;
+            %prctile(S(454).PixelValues,95);
+            Int90Prctile = arrayfun(@(x) prctile(x.PixelValues,99.9),S);
+            IntsPeri{i}=Intensities;
+            Ints90PPeri{i}= Int90Prctile;
+        end
+    end
+    
     
     %Apply drift correction to centroids!
     Tforms = MD.getSpecificMetadata('driftTform','Position',Well, 'frame', frame);
@@ -105,13 +143,17 @@ function welllbl = WellsConstructor_v3(fpath, Well,frame,NucChannel,varargin)
     welllbl.Centroids = Centroids;
     welllbl.Areas = Areas;
     welllbl.nzAreas = nzAreas;
-    welllbl.Intensities = Ints;
-    welllbl.Int90Prctile = Ints90P;
-    
-    welllbl.channels = Channels;
+    if periRingFlag
+        welllbl.Intensities = [Ints; IntsPeri(indOtherChannels);IntsFRET];
+        welllbl.Int90Prctile = [Ints90P; Ints90PPeri(indOtherChannels)];
+        welllbl.channels = [Channels; cellfun(@(x) [x '_peri'],Channels(indOtherChannels),'UniformOutput',false)];
+    else
+        welllbl.Intensities = [Ints; IntsFRET];
+        welllbl.Int90Prctile = Ints90P;
+        welllbl.channels = Channels;
+    end
     
     welllbl.num = numel(NuclearIntensities);
-
 
     frame
     

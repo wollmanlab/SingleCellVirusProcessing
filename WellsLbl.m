@@ -1,4 +1,4 @@
-classdef WellsLbl < handle %class of single cell processing of a whole cornea at a single timepoint
+classdef WellsLbl < handle %class of single cell processing of a well at a single timepoint
     properties
         PosName
         acq
